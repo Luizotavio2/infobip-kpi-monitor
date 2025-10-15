@@ -1,4 +1,11 @@
 {
+  "name": "infobip-dashboard",
+  "version": "1.0.0",
+  "description": "Dashboard de KPIs Infobip",
+  "main": "index.js",
+  "scripts": {
+    "start": "node monitor.js"
+  },
   "dependencies": {
     "axios": "^1.12.2",
     "dotenv": "^17.2.3",

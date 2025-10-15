@@ -1,30 +1,27 @@
 require('dotenv').config();
-
 const axios = require('axios');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 
-const PORT = 3000;
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
-
+// ======================= CONFIGURAÇÃO =======================
+const PORT = process.env.PORT || 3000;
 const BASE_URL = process.env.INFOBIP_BASE_URL || 'URL_BASE_NAO_ENCONTRADA';
-const API_KEY = process.env.INFOBIP_API_KEY || 'CHAVE_API_NAO_ENCONTRADA'; 
-const POLLING_INTERVAL = 30000;
-const SLA_LIMIT_MS = 5 * 60 * 1000;
-const AGENT_REFRESH_CYCLES = 10;
-
+const API_KEY = process.env.INFOBIP_API_KEY || 'CHAVE_API_NAO_ENCONTRADA';
+const POLLING_INTERVAL = 30000; // 30 segundos
+const SLA_LIMIT_MS = 5 * 60 * 1000; // 5 minutos
+const AGENT_REFRESH_CYCLES = 10; // ciclos para atualizar agentes
 
 const QUEUE_NAMES_TO_MONITOR = [
   '(Labs) Agend. Fila 1',
   '(Labs) Agend. Fila 2',
-  '(Labs) Agend. fila 3',
+  '(Labs) Agend. Fila 3',
   '(Labs) Agend.Geral'
 ];
+
 const CONVERSATION_STATUSES_ARRAY = ['OPEN', 'WAITING', 'PENDING', 'SOLVED', 'CLOSED'];
 
+// ======================= VARIÁVEIS =======================
 let QUEUES_TO_MONITOR = [];
 let cachedAgentMap = null;
 let cachedQueueNames = null;
@@ -33,6 +30,7 @@ let currentCycle = 0;
 const AGENTS_BASE_ENDPOINT = `${BASE_URL}/ccaas/1/agents`;
 const QUEUES_ENDPOINT = `${BASE_URL}/ccaas/1/queues?limit=1000`;
 
+// ======================= FUNÇÕES AUXILIARES =======================
 const msToMinutesSeconds = (ms) => {
   if (ms < 0) return `0m 0s`;
   const seconds = Math.floor(ms / 1000);
@@ -41,19 +39,20 @@ const msToMinutesSeconds = (ms) => {
   return `${minutes}m ${remainingSeconds}s`;
 };
 
+// ======================= BACKEND =======================
 async function mapQueueNamesToIds() {
   if (QUEUES_TO_MONITOR.length > 0) return;
 
-  console.log('🔍 Mapeando nomes de filas para IDs...');
   try {
     const response = await axios.get(QUEUES_ENDPOINT, {
       headers: { Authorization: `App ${API_KEY}` },
     });
+
     const allQueues = response.data.queues || [];
     const foundIds = [];
     const queueNameMap = {};
-
     const monitorNamesSet = new Set(QUEUE_NAMES_TO_MONITOR);
+
     allQueues.forEach((queue) => {
       if (monitorNamesSet.has(queue.name)) {
         foundIds.push(queue.id);
@@ -64,13 +63,8 @@ async function mapQueueNamesToIds() {
     QUEUES_TO_MONITOR = foundIds;
     cachedQueueNames = queueNameMap;
 
-    if (foundIds.length !== QUEUE_NAMES_TO_MONITOR.length) {
-      console.warn(`⚠️ ${QUEUE_NAMES_TO_MONITOR.length - foundIds.length} fila(s) não encontrada(s).`);
-    } else {
-      console.log(`✅ ${foundIds.length} filas mapeadas com sucesso.`);
-    }
   } catch (error) {
-    console.error('❌ Erro ao buscar e mapear filas:', error.message);
+    console.error('❌ Erro ao buscar filas:', error.message);
   }
 }
 
@@ -95,12 +89,11 @@ async function getAgents() {
 
     const agentMap = {};
     allAgents.forEach((agent) => {
-      agentMap[agent.id] =
-        agent.displayName || agent.username || agent.email || 'Agente Desconhecido';
+      agentMap[agent.id] = agent.displayName || agent.username || agent.email || 'Agente Desconhecido';
     });
 
-    console.log(`👥 ${Object.keys(agentMap).length} agentes mapeados com sucesso.`);
     return agentMap;
+
   } catch (error) {
     console.error('❌ Erro ao buscar agentes:', error.message);
     return {};
@@ -117,21 +110,19 @@ async function getAgentsCached() {
 async function getConversations() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-
   const offset = today.getTimezoneOffset();
   const sign = offset < 0 ? '+' : '-';
   const absOffset = Math.abs(offset);
   const offsetHours = String(Math.floor(absOffset / 60)).padStart(2, '0');
   const offsetMinutes = String(absOffset % 60).padStart(2, '0');
+
   const year = today.getFullYear();
   const month = String(today.getMonth() + 1).padStart(2, '0');
   const day = String(today.getDate()).padStart(2, '0');
+
   const startOfDayFormatted = `${year}-${month}-${day}T00:00:00.000${sign}${offsetHours}${offsetMinutes}`;
 
-  if (QUEUES_TO_MONITOR.length === 0) {
-    console.warn('⚠️ Nenhuma fila mapeada. Verifique os nomes e permissões da API.');
-    return [];
-  }
+  if (QUEUES_TO_MONITOR.length === 0) return [];
 
   const queryParts = [`limit=500`, `updatedAfter=${startOfDayFormatted}`];
   CONVERSATION_STATUSES_ARRAY.forEach((status) => queryParts.push(`status=${status}`));
@@ -145,12 +136,15 @@ async function getConversations() {
       headers: { Authorization: `App ${API_KEY}` },
     });
     return response.data.conversations || [];
+
   } catch (error) {
-    console.error('❌ Erro ao buscar conversas:', error.message);
+    const statusCode = error.response ? error.response.status : 'N/A';
+    console.error(`❌ Erro [Status ${statusCode}] ao buscar conversas:`, error.message);
     return [];
   }
 }
 
+// ======================= CÁLCULO DE KPIs =======================
 function calculateKpis(conversations) {
   const totalActive = conversations.length;
   let totalWaitTimeMs = 0;
@@ -169,9 +163,12 @@ function calculateKpis(conversations) {
     const created = new Date(conv.createdAt).getTime();
     const waitTimeMs = now - created;
 
-    if (['WAITING', 'PENDING'].includes(conv.status) || (conv.status !== 'OPEN' && !conv.agentId)) {
-      const qId = conv.queueId;
+    const isWaiting =
+      ['WAITING', 'PENDING'].includes(conv.status) ||
+      (conv.status === 'OPEN' && !conv.agentId);
 
+    if (isWaiting) {
+      const qId = conv.queueId;
       if (waitTimeMs > 0) {
         waitingCount++;
         totalWaitTimeMs += waitTimeMs;
@@ -223,10 +220,7 @@ function calculateKpis(conversations) {
 
   return {
     'Total de Tickets (Filtrados)': totalActive,
-    'Tickets em Fila (Esperando)': waitingCount,
     'Tickets em Risco de SLA (> 5min)': slaRiskCount,
-    'Tempo Médio de Espera (Fila)': msToMinutesSeconds(avgWaitTimeMs),
-    'Tempo Máximo de Espera (Fila)': msToMinutesSeconds(maxWaitTimeMs),
     'Tickets em Atendimento (OPEN)': openCount,
     'Tempo Médio de Atendimento Ativo': msToMinutesSeconds(avgOpenTimeMs),
     'Tickets Fechados (Total)': closedCount,
@@ -236,6 +230,7 @@ function calculateKpis(conversations) {
   };
 }
 
+// ======================= MONITORAMENTO =======================
 async function startMonitoring() {
   await mapQueueNamesToIds();
   currentCycle++;
@@ -269,21 +264,12 @@ async function startMonitoring() {
       .filter((detail) => detail.count > 0);
 
     io.emit('kpiUpdate', kpis, agentLoadDetails, queueDetails);
-
-    console.log(
-      `✅ [${new Date().toLocaleTimeString('pt-BR')}] KPIs enviados. Total: ${
-        kpis['Total de Tickets (Filtrados)']
-      }. Em Fila: ${kpis['Tickets em Fila (Esperando)']}.`
-    );
   } else {
     io.emit(
       'kpiUpdate',
       {
         'Total de Tickets (Filtrados)': 0,
-        'Tickets em Fila (Esperando)': 0,
         'Tickets em Risco de SLA (> 5min)': 0,
-        'Tempo Médio de Espera (Fila)': '0m 0s',
-        'Tempo Máximo de Espera (Fila)': '0m 0s',
         'Tickets em Atendimento (OPEN)': 0,
         'Tempo Médio de Atendimento Ativo': '0m 0s',
         'Tickets Fechados (Total)': 0,
@@ -292,21 +278,25 @@ async function startMonitoring() {
       [],
       []
     );
-
-    console.log(`⚠️ [${new Date().toLocaleTimeString('pt-BR')}] Nenhuma conversa nas filas monitoradas.`);
   }
 }
 
+// ======================= EXPRESS / SOCKET.IO =======================
+const app = express();
+app.use(express.static('public')); // pasta frontend
 
-app.use(express.static('public'));
+const server = http.createServer(app);
+const io = new Server(server);
 
-getAgentsCached().then(() => {
-  setInterval(startMonitoring, POLLING_INTERVAL);
+async function initMonitoring() {
+  await getAgentsCached();
+  await mapQueueNamesToIds();
   startMonitoring();
-});
+  setInterval(startMonitoring, POLLING_INTERVAL);
+}
+
+initMonitoring();
 
 server.listen(PORT, () => {
-  console.log(`\n==============================================`);
-  console.log(`🚀 DASHBOARD ONLINE! Acesse: http://localhost:${PORT}`);
-  console.log(`==============================================`);
+  console.log(`✅ Servidor rodando em http://localhost:${PORT}`);
 });

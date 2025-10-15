@@ -1,221 +1,57 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard de KPIs - Infobip</title>
-    <script src="/socket.io/socket.io.js"></script>
-    <style>
-        /* =============================
-           🎨 Estilos Globais e Layout
-           ============================= */
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f4f7f9; /* Fundo cinza claro */
-            color: #333;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        /* Estilo base dos blocos de conteúdo */
-        .dashboard-block {
-            background-color: #fff;
-            margin-bottom: 20px;
-            border-radius: 4px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-            padding: 20px;
-        }
-
-        /* Título dos Blocos */
-        h2 {
-            font-size: 1.5em;
-            font-weight: 500;
-            color: #333;
-            margin-bottom: 15px;
-        }
-
-        /* =============================
-           1️⃣ Destaques de Atendimento (Cartões)
-           ============================= */
-        .kpi-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr); 
-            gap: 20px;
-        }
-        
-        .kpi-card {
-            padding: 20px;
-            border-radius: 4px;
-            text-align: left;
-            border: 1px solid #e9ecef;
-            background-color: #fff; 
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-        }
-
-        .kpi-card .value {
-            font-size: 2.5em;
-            font-weight: 400; 
-            color: #007bff; /* Azul padrão para números de ticket */
-            margin: 5px 0 10px 0;
-        }
-
-        /* Cor para valores de tempo */
-        .kpi-card.time-kpi .value {
-            color: #333; 
-        }
-
-        .kpi-card .label {
-            font-size: 0.85em;
-            color: #6c757d;
-            text-transform: uppercase;
-        }
-
-        /* =============================
-           2️⃣ Tabela de Carga de Agentes
-           ============================= */
-        .data-table {
-            width: 100%;
-            border-collapse: collapse;
-            /* Garante que o padding horizontal da tabela corresponda ao bloco */
-            margin-top: 5px; 
-        }
-
-        .data-table th {
-            padding: 5px 0; 
-            text-align: left;
-            color: #6c757d;
-            font-weight: 500;
-            font-size: 0.85em; 
-            text-transform: uppercase;
-            /* Remove a linha divisória do cabeçalho para replicar o design */
-            border-bottom: none !important; 
-        }
-
-        .data-table td {
-            padding: 8px 0;
-            text-align: left;
-            /* Por padrão, dados de agente terão borda, mas a linha 'no-data' não */
-            border-bottom: 1px solid #eee; 
-        }
-        
-        /* Estilo para a linha de "Nenhum dado" */
-        .no-data-row td {
-            text-align: center !important;
-            color: #999;
-            font-style: italic;
-            padding-top: 20px; 
-            padding-bottom: 20px;
-            /* Remove a borda inferior para o estado de "sem dados", como na imagem */
-            border-bottom: none; 
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monitor de Atendimento - Infobip</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="script.js" defer></script>
 </head>
 <body>
+  <header class="topbar">
+    <div class="logo">INF<span>OBIP - KPI MONITOR</span></div>
+    <div class="datetime" id="datetime"></div>
+  </header>
 
-    <div class="container">
+  <main class="dashboard">
+    <section class="kpi-section">
+      <div class="kpi-card">
+        <div class="kpi-value" id="total-tickets">0</div>
+        <div class="kpi-label">TICKETS EM ABERTO</div>
+      </div>
+        <!---<div class="kpi-card">
+        <div class="kpi-value" id="open-tickets">0</div>
+        <div class="kpi-label">TICKETS AGUARDANDO</div>
+      </div>--->
+      <div class="kpi-card">
+        <div class="kpi-value" id="sla-risk">0</div>
+        <div class="kpi-label">TICKETS EM RISCO DE SLA</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value" id="avg-handling-time">0m 0s</div>
+        <div class="kpi-label">TEMPO MÉDIO DE ATENDIMENTO</div>
+      </div>
+    </section>
 
-        <div class="dashboard-block">
-            <h2>Destaques de Atendimento</h2>
-            
-            <div id="kpi-grid-1" class="kpi-grid">
-                
-                <div class="kpi-card">
-                    <div id="total-tickets" class="value">0</div>
-                    <div class="label">TOTAL DE TICKETS (HOJE)</div>
-                </div>
+    <section class="agents-section">
+      <h2>Carga de Agentes</h2>
+      <table id="agents-table" class="data-table">
+        <thead>
+          <tr>
+            <th>Agente</th>
+            <th>Tickets Atribuídos</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="no-data-row">
+            <td colspan="2">Nenhum agente ativo no momento</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
 
-                <div class="kpi-card">
-                    <div id="open-tickets" class="value">0</div>
-                    <div class="label">TICKETS EM ATENDIMENTO (OPEN)</div>
-                </div>
-
-                <div class="kpi-card time-kpi">
-                    <div id="avg-handling-time" class="value">0m 0s</div>
-                    <div class="label">TEMPO MÉDIO DE ATENDIMENTO ATIVO</div>
-                </div>
-            </div>
-        </div>
-
-        <div class="dashboard-block">
-            <h2>Carga de Agentes (Tickets Atribuídos - OPEN)</h2>
-            <table id="agents-table" class="data-table">
-                <thead>
-                    <tr>
-                        <th style="width: 70%;">AGENTE</th>
-                        <th style="width: 30%;">TICKETS ATRIBUÍDOS</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr class="no-data-row"><td colspan="2">Nenhum agente com tickets atribuídos no momento.</td></tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div id="last-update" style="text-align: right; color: #6c757d; font-size: 0.8em; margin-top: 10px;"></div>
-    </div>
-
-    <script>        
-        const socket = io();
-
-        socket.on('connect', () => {
-            console.log('✅ Conectado ao servidor de Dashboard via Socket.IO');
-        });
-
-        // O backend ainda envia queueDetails, mas não vamos usá-lo ou a função renderQueueTable.
-        socket.on('kpiUpdate', (kpis, agentLoadDetails) => {
-            console.log('🔄 Dados de KPIs recebidos:', kpis);
-            
-            // --- 1. Destaques (3 KPIs Essenciais) ---
-            document.getElementById('total-tickets').textContent = kpis['Total de Tickets (Filtrados)'] || 0;
-            document.getElementById('open-tickets').textContent = kpis['Tickets em Atendimento (OPEN)'] || 0;
-            document.getElementById('avg-handling-time').textContent = kpis['Tempo Médio de Atendimento Ativo'] || '0m 0s';
-            
-            // --- 2. Tabela de Agentes ---
-            renderAgentTable(agentLoadDetails);
-            
-            updateTimestamp();
-        });
-        
-        /**
-         * Renderiza a tabela de carga de trabalho dos agentes.
-         */
-        function renderAgentTable(agentLoadDetails) {
-            const tbody = document.getElementById('agents-table').querySelector('tbody');
-            tbody.innerHTML = ''; 
-
-            if (!agentLoadDetails || agentLoadDetails.length === 0) {
-                // Se não houver dados, exibe a linha de placeholder.
-                tbody.innerHTML = '<tr class="no-data-row"><td colspan="2">Nenhum agente com tickets atribuídos no momento.</td></tr>';
-                return;
-            }
-
-            agentLoadDetails.forEach(agent => {
-                const row = tbody.insertRow();
-                row.innerHTML = `
-                    <td>${agent.name}</td>
-                    <td>${agent.count}</td>
-                `;
-            });
-            
-            // Remove a borda inferior da última linha de dados (para replicar o design minimalista).
-            if (tbody.lastElementChild && !tbody.lastElementChild.classList.contains('no-data-row')) {
-                tbody.lastElementChild.querySelector('td:last-child').style.borderBottom = 'none';
-            }
-        }
-        
-        function updateTimestamp() {
-            const now = new Date();
-            // Formata a hora como HH:MM:SS
-            const timeString = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            document.getElementById('last-update').textContent = `Última atualização: ${timeString}`;
-        }
-        
-        updateTimestamp();
-    </script>
+    <div class="update-time" id="last-update"></div>
+  </main>
 </body>
 </html>
