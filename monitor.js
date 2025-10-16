@@ -4,13 +4,12 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 
-// ======================= CONFIGURAÇÃO =======================
 const PORT = process.env.PORT || 3000;
 const BASE_URL = process.env.INFOBIP_BASE_URL || 'URL_BASE_NAO_ENCONTRADA';
 const API_KEY = process.env.INFOBIP_API_KEY || 'CHAVE_API_NAO_ENCONTRADA';
 const POLLING_INTERVAL = 30000; // 30 segundos
-const SLA_LIMIT_MS = 5 * 60 * 1000; // 5 minutos
-const AGENT_REFRESH_CYCLES = 10; // ciclos para atualizar agentes
+const SLA_LIMIT_MS = 5 * 60 * 1000;
+const AGENT_REFRESH_CYCLES = 10; 
 
 const QUEUE_NAMES_TO_MONITOR = [
   '(Labs) Agend. Fila 1',
@@ -21,7 +20,6 @@ const QUEUE_NAMES_TO_MONITOR = [
 
 const CONVERSATION_STATUSES_ARRAY = ['OPEN', 'WAITING', 'PENDING', 'SOLVED', 'CLOSED'];
 
-// ======================= VARIÁVEIS =======================
 let QUEUES_TO_MONITOR = [];
 let cachedAgentMap = null;
 let cachedQueueNames = null;
@@ -29,8 +27,6 @@ let currentCycle = 0;
 
 const AGENTS_BASE_ENDPOINT = `${BASE_URL}/ccaas/1/agents`;
 const QUEUES_ENDPOINT = `${BASE_URL}/ccaas/1/queues?limit=1000`;
-
-// ======================= FUNÇÕES AUXILIARES =======================
 const msToMinutesSeconds = (ms) => {
   if (ms < 0) return `0m 0s`;
   const seconds = Math.floor(ms / 1000);
@@ -39,7 +35,6 @@ const msToMinutesSeconds = (ms) => {
   return `${minutes}m ${remainingSeconds}s`;
 };
 
-// ======================= BACKEND =======================
 async function mapQueueNamesToIds() {
   if (QUEUES_TO_MONITOR.length > 0) return;
 
@@ -124,7 +119,7 @@ async function getConversations() {
 
   if (QUEUES_TO_MONITOR.length === 0) return [];
 
-  const queryParts = [`limit=500`, `updatedAfter=${startOfDayFormatted}`];
+  const queryParts = [`limit=1000`, `updatedAfter=${startOfDayFormatted}`];
   CONVERSATION_STATUSES_ARRAY.forEach((status) => queryParts.push(`status=${status}`));
   QUEUES_TO_MONITOR.forEach((id) => queryParts.push(`queueIds=${id}`));
 
@@ -143,8 +138,6 @@ async function getConversations() {
     return [];
   }
 }
-
-// ======================= CÁLCULO DE KPIs =======================
 function calculateKpis(conversations) {
   const totalActive = conversations.length;
   let totalWaitTimeMs = 0;
@@ -229,8 +222,6 @@ function calculateKpis(conversations) {
     'Dados por Fila': formattedQueueKpis,
   };
 }
-
-// ======================= MONITORAMENTO =======================
 async function startMonitoring() {
   await mapQueueNamesToIds();
   currentCycle++;
@@ -280,8 +271,6 @@ async function startMonitoring() {
     );
   }
 }
-
-// ======================= EXPRESS / SOCKET.IO =======================
 const app = express();
 app.use(express.static('public')); // pasta frontend
 
