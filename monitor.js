@@ -14,7 +14,7 @@ const AGENT_REFRESH_CYCLES = 10;
 const QUEUE_NAMES_TO_MONITOR = [
   '(Labs) Agend. Fila 1',
   '(Labs) Agend. Fila 2',
-  '(Labs) Agend. Fila 3',
+  '(Labs) Agend. fila 3',
   '(Labs) Agend.Geral'
 ];
 
